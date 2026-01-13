@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tec Ventures · Índice de Prioridad Comercial</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google Charts -->
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --bg:#f2f4f7;
+  --card:#ffffff;
+  --ink:#1f2937;
+  --muted:#6b7280;
+  --blue:#0b3c5d;
+  --border:#e5e7eb;
+}
+*{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;}
+body{margin:0;background:var(--bg);color:var(--ink);}
+header{padding:18px 28px;background:var(--card);border-bottom:1px solid var(--border);}
+header h1{margin:0;font-size:18px;color:var(--blue);}
+.container{max-width:1300px;margin:auto;padding:24px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:18px;}
+.search input{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:14px;}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:18px;}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.kpi{background:#eef3f7;border-radius:10px;padding:12px;}
+.kpi .label{font-size:12px;color:var(--muted);}
+.kpi .value{font-size:18px;font-weight:600;color:var(--blue);}
+.badge{background:var(--blue);color:#fff;border-radius:999px;padding:4px 8px;font-size:11px;}
+ul{padding-left:18px;font-size:13px;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Índice de Prioridad Comercial · Tec Ventures</h1>
+</header>
+
+<div class="container">
+
+<div class="card search">
+  <input id="search" placeholder="Buscar empresa…" />
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h3>Matriz Penetración vs Potencial</h3>
+    <div id="chart" style="height:420px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Resumen Ejecutivo</h3>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">IPC</div><div class="value" id="ipc">—</div></div>
+      <div class="kpi"><div class="label">Segmento</div><div class="value" id="segment">—</div></div>
+      <div class="kpi"><div class="label">Venta Total</div><div class="value" id="ventas">—</div></div>
+      <div class="kpi"><div class="label">Compras</div><div class="value" id="compras">—</div></div>
+      <div class="kpi"><div class="label">Última Compra</div><div class="value" id="ultima">—</div></div>
+    </div>
+
+    <h4>Estrategia sugerida</h4>
+    <p id="strategy" style="font-size:13px;">—</p>
+
+    <h4>Productos recomendados</h4>
+    <ul id="products"></ul>
+  </div>
+
+</div>
+</div>
+
+<script>
+let data = [];
+let chart;
+
+// ---------- UTIL ----------
+function quadrant(pen, pot){
+  if(pen>=50 && pot>=50) return "Alta penetración · Alto potencial";
+  if(pen<50 && pot>=50) return "Baja penetración · Alto potencial";
+  if(pen>=50 && pot<50) return "Alta penetración · Bajo potencial";
+  return "Baja penetración · Bajo potencial";
+}
+
+function strategy(pen, pot){
+  if(pen>=50 && pot>=50) return "Gestión tipo KAM. Relación estratégica, soluciones a la medida.";
+  if(pen<50 && pot>=50) return "Desarrollo de cuenta. Activar cross-sell dirigido.";
+  if(pen>=50 && pot<50) return "Defensa y eficiencia. Mantener rentabilidad.";
+  return "Cobertura selectiva. Atención eficiente y automatizada.";
+}
+
+function products(pen, pot){
+  if(pot>=50) return ["Raspberry – Pólizas", "Tec Venues", "Patrocinios"];
+  return ["Club 16", "Raspberry – Pólizas"];
+}
+
+// ---------- LOAD EXCEL ----------
+fetch("savannah_unified_with_ipc.xlsx")
+.then(r=>r.arrayBuffer())
+.then(buf=>{
+  const wb = XLSX.read(buf,{type:"array"});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  data = XLSX.utils.sheet_to_json(ws);
+
+  google.charts.load('current', {'packages':['corechart']});
+  google.charts.setOnLoadCallback(drawChart);
+});
+
+// ---------- CHART ----------
+function drawChart(){
+  const dt = new google.visualization.DataTable();
+  dt.addColumn('number','Penetración');
+  dt.addColumn('number','Potencial');
+  dt.addColumn({type:'string',role:'tooltip'});
+
+  data.forEach(d=>{
+    dt.addRow([+d.PenetrationScore, +d.PotentialScore, d.Primary_Name || d.Name]);
+  });
+
+  chart = new google.visualization.ScatterChart(document.getElementById('chart'));
+  chart.draw(dt,{
+    hAxis:{title:'Penetración',minValue:0,maxValue:100},
+    vAxis:{title:'Potencial',minValue:0,maxValue:100},
+    legend:'none',
+    colors:['#0b3c5d']
+  });
+
+  google.visualization.events.addListener(chart,'select',()=>{
+    const s = chart.getSelection();
+    if(s.length) show(data[s[0].row]);
+  });
+}
+
+// ---------- SEARCH ----------
+document.getElementById("search").addEventListener("input",e=>{
+  const q = e.target.value.toLowerCase();
+  const f = data.find(d=>(d.Primary_Name||"").toLowerCase().includes(q));
+  if(f) show(f);
+});
+
+// ---------- DETAIL ----------
+function show(d){
+  document.getElementById("ipc").innerText = d.IPC.toFixed(1);
+  document.getElementById("segment").innerHTML = `<span class="badge">${quadrant(d.PenetrationScore,d.PotentialScore)}</span>`;
+  document.getElementById("ventas").innerText = `$${Number(d["Suma de Importe_total_de_ventas__c"]).toLocaleString()}`;
+  document.getElementById("compras").innerText = d["Suma de Recuento_de_oportunidades__c"];
+  document.getElementById("ultima").innerText = d.Ultima_fecha_de_compra__c;
+  document.getElementById("strategy").innerText = strategy(d.PenetrationScore,d.PotentialScore);
+
+  const ul = document.getElementById("products");
+  ul.innerHTML="";
+  products(d.PenetrationScore,d.PotentialScore).forEach(p=>{
+    const li=document.createElement("li");li.innerText=p;ul.appendChild(li);
+  });
+}
+</script>
+
+</body>
+</html>
